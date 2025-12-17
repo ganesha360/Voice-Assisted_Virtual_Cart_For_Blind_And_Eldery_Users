@@ -95,7 +95,7 @@ STARBOY is a vision-powered, voice-controlled AI billing assistant built using m
 ## 👨‍💻 Author
 
 Ganesh R  
-Aspiring Machine Learning Engineer | AI & Computer Vision Enthusiast
+Aspiring Machine Learning Engineer 
 
 ---
 
