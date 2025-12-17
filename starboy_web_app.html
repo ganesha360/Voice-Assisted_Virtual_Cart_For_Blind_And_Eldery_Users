@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STARBOY Vision AI Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@latest/dist/coco-ssd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0c0a18;
+            color: #e0e0e0;
+        }
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+        .glass-panel {
+            background: rgba(22, 28, 51, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 191, 255, 0.2);
+            border-radius: 16px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1), inset 0 0 10px rgba(0, 191, 255, 0.1);
+        }
+        .text-glow {
+            text-shadow: 0 0 5px rgba(0, 191, 255, 0.7), 0 0 10px rgba(0, 191, 255, 0.5);
+        }
+        #starboy-orb {
+            cursor: default;
+            transition: all 0.3s ease-in-out;
+            box-shadow: 0 0 15px rgba(0, 191, 255, 0.5), 0 0 30px rgba(0, 191, 255, 0.3);
+        }
+        #starboy-orb.listening {
+            animation: pulse-animation 1.5s infinite;
+            background-color: #00bfff;
+        }
+        @keyframes pulse-animation {
+            0% { transform: scale(1); box-shadow: 0 0 15px rgba(0, 191, 255, 0.5), 0 0 30px rgba(0, 191, 255, 0.3); }
+            50% { transform: scale(1.05); box-shadow: 0 0 25px rgba(0, 191, 255, 0.8), 0 0 50px rgba(0, 191, 255, 0.5); }
+            100% { transform: scale(1); box-shadow: 0 0 15px rgba(0, 191, 255, 0.5), 0 0 30px rgba(0, 191, 255, 0.3); }
+        }
+        .ai-button {
+            background-color: rgba(0, 191, 255, 0.2);
+            border: 1px solid rgba(0, 191, 255, 0.5);
+            transition: all 0.3s ease;
+        }
+        .ai-button:hover:not(:disabled) {
+            background-color: rgba(0, 191, 255, 0.4);
+            box-shadow: 0 0 10px rgba(0, 191, 255, 0.5);
+        }
+        .ai-button:disabled {
+            background-color: rgba(128, 128, 128, 0.1);
+            border-color: rgba(128, 128, 128, 0.3);
+            cursor: not-allowed;
+            color: #666;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #00bfff;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #ai-output { white-space: pre-wrap; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #161c33; }
+        ::-webkit-scrollbar-thumb { background: #00bfff; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #009acd; }
+    </style>
+</head>
+<body class=" text-gray-200">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <header class="text-center mb-8">
+            <h1 class="text-5xl font-bold font-orbitron text-glow text-cyan-300">S T A R B O Y</h1>
+            <p class="text-lg text-cyan-100 opacity-75 mt-2">Your Personal Vision-Powered Billing Assistant</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+            <div class="lg:col-span-2 space-y-8">
+                <div class="glass-panel p-6 flex flex-col items-center justify-center text-center">
+                    <div id="vision-container" class="relative w-full aspect-video bg-black rounded-md overflow-hidden mb-4">
+                          <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover transform -scale-x-100"></video>
+                          <div id="vision-status-overlay" class="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-semibold p-4">
+                                Initializing Camera...
+                          </div>
+                    </div>
+                    <div id="orb-container" class="hidden w-32 h-32 flex items-center justify-center mb-6">
+                        <div id="starboy-orb" class="w-32 h-32 flex items-center justify-center rounded-full bg-cyan-500 border-2 border-cyan-300">
+                            <svg id="mic-icon" xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                            </svg>
+                        </div>
+                    </div>
+                    <h2 id="voiceStatus" class="text-xl font-medium text-cyan-200 min-h-[56px]">Initializing Assistant...</h2>
+                    <p id="voiceHint" class="text-sm text-cyan-400 opacity-60 mt-2">Please wait.</p>
+                </div>
+
+                <div class="glass-panel p-6">
+                    <h2 class="text-2xl font-semibold mb-4 font-orbitron text-cyan-200 text-glow">✨ AI Insights</h2>
+                    <div class="space-y-4 mb-4">
+                        <button id="summarizeBtn" class="w-full py-2 px-4 rounded-lg ai-button" disabled>✨ Summarize Purchase</button>
+                        <button id="recipeBtn" class="w-full py-2 px-4 rounded-lg ai-button" disabled>✨ Suggest a Recipe (3+ items)</button>
+                    </div>
+                    <div id="ai-response-container" class="mt-4 p-4 bg-black/20 rounded-lg min-h-[100px] text-sm text-cyan-100">
+                        <p id="ai-placeholder" class="text-gray-400 italic">AI responses will appear here...</p>
+                        <div id="ai-loader" class="hidden mx-auto loader"></div>
+                        <p id="ai-output"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-3 glass-panel p-6">
+                <h2 class="text-3xl font-semibold mb-4 border-b border-cyan-500/30 pb-3 font-orbitron text-cyan-200 text-glow">Invoice</h2>
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h3 class="text-lg font-bold text-white">Your Company Inc.</h3>
+                        <p class="text-sm text-gray-400">123 Cyber Rd, Suite 101<br>Tech City, 54321</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm text-gray-400">Invoice #: <span id="invoiceNumber">1001</span></p>
+                        <p class="text-sm text-gray-400">Date: <span id="invoiceDate"></span></p>
+                    </div>
+                </div>
+                <div class="overflow-y-auto max-h-64">
+                    <table class="min-w-full">
+                        <thead class="sticky top-0 bg-gray-900/50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-cyan-300 uppercase tracking-wider">Product</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-cyan-300 uppercase tracking-wider">Qty</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-cyan-300 uppercase tracking-wider">Price</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-cyan-300 uppercase tracking-wider">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="billItems" class="divide-y divide-cyan-500/20">
+                             <tr id="placeholder-row">
+                                 <td colspan="4" class="px-4 py-10 text-center text-gray-500 italic">Invoice is empty.</td>
+                             </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex justify-end mt-8">
+                    <div class="w-full max-w-xs space-y-2">
+                        <div class="flex justify-between text-sm text-gray-300"><span>Subtotal:</span><span id="subtotal">₹0.00</span></div>
+                        <div class="flex justify-between text-sm text-gray-300"><span>Tax (18%):</span><span id="tax">₹0.00</span></div>
+                        <div class="flex justify-between text-xl font-semibold border-t border-cyan-500/30 pt-2 mt-2 text-cyan-200">
+                            <span>Total:</span><span id="total" class="text-glow text-cyan-300">₹0.00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const billItems = document.getElementById('billItems');
+            const subtotalEl = document.getElementById('subtotal');
+            const taxEl = document.getElementById('tax');
+            const totalEl = document.getElementById('total');
+            const placeholderRow = document.getElementById('placeholder-row');
+            const starboyOrb = document.getElementById('starboy-orb');
+            const voiceStatus = document.getElementById('voiceStatus');
+            const voiceHint = document.getElementById('voiceHint');
+            const summarizeBtn = document.getElementById('summarizeBtn');
+            const recipeBtn = document.getElementById('recipeBtn');
+            const aiPlaceholder = document.getElementById('ai-placeholder');
+            const aiLoader = document.getElementById('ai-loader');
+            const aiOutput = document.getElementById('ai-output');
+            const webcam = document.getElementById('webcam');
+            const visionContainer = document.getElementById('vision-container');
+            const orbContainer = document.getElementById('orb-container');
+            const visionStatusOverlay = document.getElementById('vision-status-overlay');
+
+            let items = [];
+            const TAX_RATE = 0.18;
+            let productDatabase = new Map();
+            let personHasBeenGreeted = false;
+
+            const updateStatus = (text, hint, isListeningNow) => {
+                voiceStatus.textContent = text;
+                voiceHint.textContent = hint;
+                if(orbContainer.style.display !== 'none') {
+                    starboyOrb.classList.toggle('listening', isListeningNow);
+                }
+            };
+
+            async function setupCameraAndDetection() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    webcam.srcObject = stream;
+                    visionStatusOverlay.textContent = 'Loading vision model...';
+                    
+                    const model = await cocoSsd.load();
+                    visionStatusOverlay.textContent = 'Scanning for person...';
+                    updateStatus("Vision Active", "Scanning for person...", false);
+
+                    const detectPersonLoop = async () => {
+                        if (personHasBeenGreeted) return;
+                        
+                        const predictions = await model.detect(webcam);
+                        const personPrediction = predictions.find(p => p.class === 'person' && p.score > 0.6);
+
+                        if (personPrediction) {
+                            personHasBeenGreeted = true;
+                            visionContainer.style.display = 'none';
+                            orbContainer.style.display = 'flex';
+                            
+                            stream.getTracks().forEach(track => track.stop());
+
+                            conversationState = 'GREETING';
+                            speak("Hello there. I see you. Welcome to STARBOY. How may I help you?", () => {
+                                conversationState = 'AWAITING_COMMAND';
+                                updateStatus("How may I help?", "e.g., 'Add 5 milk' or 'Summarize purchase'", true);
+                                startRecognition();
+                            });
+                        } else {
+                            requestAnimationFrame(detectPersonLoop);
+                        }
+                    };
+                    detectPersonLoop();
+
+                } catch (error) {
+                    console.error("Camera or model setup failed:", error);
+                    visionContainer.style.display = 'none';
+                    orbContainer.style.display = 'flex';
+                    updateStatus("Vision disabled.", "Camera access denied or not found.", false);
+                    setTimeout(() => resetToVoiceMode(), 1000); 
+                }
+            }
+            
+            function resetToVisionMode() {
+                items = [];
+                renderBill();
+                aiOutput.textContent = '';
+                aiPlaceholder.classList.remove('hidden');
+                personHasBeenGreeted = false;
+                conversationState = 'CAMERA_SETUP';
+                orbContainer.style.display = 'none';
+                visionContainer.style.display = 'block';
+                setupCameraAndDetection();
+            }
+
+            const API_KEY = "";
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+            
+            async function callGeminiAPI(prompt, retries = 3, delay = 1000) {
+                aiPlaceholder.classList.add('hidden');
+                aiOutput.textContent = '';
+                aiLoader.classList.remove('hidden');
+                const payload = { contents: [{ parts: [{ text: prompt }] }] };
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) {
+                        throw new Error(`API Error: ${response.status}`);
+                    }
+                    const result = await response.json();
+                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (text) {
+                        aiOutput.textContent = text;
+                        return text;
+                    } else {
+                        throw new Error("Invalid response structure from API.");
+                    }
+                } catch (error) {
+                    console.error("Gemini API call failed:", error);
+                    if (retries > 0) {
+                        await new Promise(res => setTimeout(res, delay));
+                        return callGeminiAPI(prompt, retries - 1, delay * 2);
+                    }
+                    aiOutput.textContent = "Sorry, the AI is unable to respond right now.";
+                    return null;
+                } finally {
+                    aiLoader.classList.add('hidden');
+                }
+            }
+
+            function loadProducts() {
+                const csvData = `PRODUCT,DESCRIPTION,QTY,PRICE (₹),TOTAL (₹)
+Rice,"Basmati long-grain rice, 1 kg",2,450,900
+Wheat Flour,"Whole wheat flour, 1 kg",1,380,380
+Sugar,"Refined white sugar, 2 packs",3,90,270
+Cooking Oil,"Sunflower cooking oil, 1 litres",2,160,320
+Milk,"Fresh cow milk, 1 liters",5,60,300
+Eggs,"Farm-fresh eggs, 1",2,70,140
+Salt,"Refined iodized salt, 1 kg",2,25,50
+Tea Powder,"Premium black tea leaves, 500g",1,150,150
+Coffee,"Instant coffee powder, 200g",1,300,300
+Toor Dal,"Split pigeon peas (toor dal), 2kg",2,240,480
+Detergent,"Washing powder, lemon fragrance, 1kg",1,120,120
+Soap,"Bathing soap, aloe vera, pack of 4",3,140,420
+Toothpaste,"Herbal toothpaste, 200g tube",2,80,160
+Shampoo,"Anti-dandruff shampoo, 180ml bottle",1,180,180
+Biscuits,"Chocolate cream biscuits, 200g pack",4,50,200`;
+                try {
+                    const lines = csvData.split('\n').slice(1);
+                    lines.forEach(line => {
+                        if (!line.trim()) return;
+                        const parts = line.match(/(".*?"|[^,]+)/g).map(field => field.trim().replace(/"/g, ''));
+                        if (parts.length >= 4) {
+                            const productName = parts[0].trim().toLowerCase();
+                            const price = parseFloat(parts[3]);
+                            if (productName && !isNaN(price)) {
+                                productDatabase.set(productName, price);
+                            }
+                        }
+                    });
+                } catch (error) {
+                    console.error("Error parsing product data:", error);
+                    voiceStatus.textContent = "Error loading products.";
+                }
+            }
+            
+            document.getElementById('invoiceDate').textContent = new Date().toLocaleDateString('en-GB');
+            const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
+
+            const updateTotals = () => {
+                const subtotal = items.reduce((sum, item) => sum + item.quantity * item.price, 0);
+                const tax = subtotal * TAX_RATE;
+                const total = subtotal + tax;
+                subtotalEl.textContent = formatCurrency(subtotal);
+                taxEl.textContent = formatCurrency(tax);
+                totalEl.textContent = formatCurrency(total);
+                summarizeBtn.disabled = items.length === 0;
+                recipeBtn.disabled = items.length < 3;
+                return formatCurrency(total);
+            };
+
+            const renderBill = () => {
+                placeholderRow.style.display = items.length > 0 ? 'none' : 'table-row';
+                billItems.innerHTML = '';
+                 if (items.length === 0) {
+                    billItems.appendChild(placeholderRow);
+                 } else {
+                     items.forEach(item => {
+                         const row = document.createElement('tr');
+                         const itemTotal = item.quantity * item.price;
+                         row.innerHTML = `
+                             <td class="px-4 py-3 whitespace-nowrap"><div class="text-sm font-medium text-white">${item.name}</div></td>
+                             <td class="px-4 py-3 whitespace-nowrap text-center text-sm text-gray-300">${item.quantity}</td>
+                             <td class="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-300">${formatCurrency(item.price)}</td>
+                             <td class="px-4 py-3 whitespace-nowrap text-right text-sm font-semibold text-white">${formatCurrency(itemTotal)}</td>
+                         `;
+                         billItems.appendChild(row);
+                     });
+                 }
+                return updateTotals();
+            };
+            
+            const addProduct = (name, quantity) => {
+                const lowerCaseName = name.toLowerCase();
+                if (productDatabase.has(lowerCaseName)) {
+                    const price = productDatabase.get(lowerCaseName);
+                    const displayName = name.replace(/\b\w/g, l => l.toUpperCase());
+                    const existingItem = items.find(item => item.name.toLowerCase() === lowerCaseName);
+                    if (existingItem) {
+                        existingItem.quantity += quantity;
+                    } else {
+                        items.push({ name: displayName, quantity, price });
+                    }
+                    return renderBill();
+                }
+                return null;
+            };
+
+            const removeProduct = (name) => {
+                const lowerCaseName = name.toLowerCase();
+                const initialLength = items.length;
+                items = items.filter(item => item.name.toLowerCase() !== lowerCaseName);
+
+                if (items.length < initialLength) {
+                    const newTotal = renderBill();
+                    const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
+                    return `Removed ${capitalizedName}. The new total is ${newTotal}.`;
+                } else {
+                    return `I could not find ${name} in your invoice.`;
+                }
+            };
+            
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            let recognition;
+            if (SpeechRecognition) {
+                recognition = new SpeechRecognition();
+                recognition.continuous = true;
+                recognition.lang = 'en-US';
+            }
+            
+            let conversationState = 'CAMERA_SETUP';
+            let tempProduct = {};
+            let isListening = false;
+            const speechQueue = [];
+            let isSpeaking = false;
+
+            function processSpeechQueue() {
+                if (isSpeaking || speechQueue.length === 0) return;
+                isSpeaking = true;
+                stopRecognition();
+                updateStatus("Thinking...", "Please wait.", false);
+                const speechItem = speechQueue.shift();
+                const utterance = new SpeechSynthesisUtterance(speechItem.text);
+                utterance.onend = () => {
+                    isSpeaking = false;
+                    if (speechItem.onEndCallback) {
+                        speechItem.onEndCallback();
+                    }
+                    processSpeechQueue(); 
+                };
+                speechSynthesis.speak(utterance);
+            }
+
+            function speak(text, onEndCallback) {
+                speechQueue.push({ text, onEndCallback });
+                processSpeechQueue();
+            }
+
+            async function handleSummarize() {
+                if (items.length === 0) {
+                    speak("Your invoice is empty. Add some items first.", () => returnToCommandMode(null));
+                    return;
+                }
+                const itemList = items.map(i => `${i.quantity} ${i.name}`).join(', ');
+                const prompt = `Here is a list of grocery items a person bought: ${itemList}. The total bill is ${totalEl.textContent}. Please provide a short, friendly summary of this purchase in one or two sentences, perhaps grouping items into categories.`;
+                speak("Analyzing your purchase...", async () => {
+                   const summary = await callGeminiAPI(prompt);
+                   returnToCommandMode(summary || "I couldn't generate a summary right now.");
+                });
+            }
+
+            async function handleRecipe() {
+                if (items.length < 3) {
+                    speak("You need at least three items to get a recipe suggestion.", () => returnToCommandMode(null));
+                    return;
+                }
+                const ingredientList = items.map(i => i.name).join(', ');
+                const prompt = `I have the following ingredients: ${ingredientList}. Can you suggest a simple recipe I can make? Please provide a name for the recipe, a list of ingredients, and step-by-step instructions.`;
+                speak("Thinking of a recipe for you...", async () => {
+                   const recipe = await callGeminiAPI(prompt);
+                    if (recipe) {
+                       speak("Here is a recipe idea based on your items.", () => returnToCommandMode(null));
+                    } else {
+                       returnToCommandMode("I couldn't come up with a recipe right now.");
+                    }
+                });
+            }
+
+            function handleListProducts() {
+                const productList = [...productDatabase.keys()].map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ');
+                const message = `The available products are: ${productList}.`;
+                returnToCommandMode(message);
+            }
+
+            function handleFinalizeBill() {
+                if (items.length === 0) {
+                    returnToCommandMode("Your invoice is empty. There is no bill to generate.");
+                    return;
+                }
+                const finalTotal = totalEl.textContent;
+                const thankYouMessage = `Your final total is ${finalTotal}. Thank you for shopping with STARBOY. Your session is now complete. The system will now reset for the next person.`;
+                speak(thankYouMessage, () => {
+                    setTimeout(() => {
+                        resetToVisionMode();
+                    }, 4000);
+                });
+            }
+
+            summarizeBtn.addEventListener('click', handleSummarize);
+            recipeBtn.addEventListener('click', handleRecipe);
+
+            const startRecognition = () => {
+                if (!recognition || isListening || isSpeaking) return;
+                try {
+                    recognition.start();
+                } catch (e) { console.error("Recognition start failed", e); }
+            };
+
+            const stopRecognition = () => {
+                if (!recognition || !isListening) return;
+                try {
+                   recognition.stop();
+                } catch(e) { console.error("Recognition stop failed", e); }
+            };
+            
+            const returnToCommandMode = (speakMessage) => {
+                conversationState = 'AWAITING_COMMAND';
+                tempProduct = {};
+                const callback = () => {
+                    updateStatus("Ready for your command.", "e.g., 'Add 2 eggs' or 'Remove milk'", true);
+                    startRecognition();
+                };
+                if(speakMessage) {
+                    speak(speakMessage, callback);
+                } else {
+                    callback();
+                }
+            };
+            
+            const resetToVoiceMode = (speakMessage = null) => {
+                const resetLogic = () => {
+                    conversationState = 'AWAITING_WAKE_WORD';
+                    tempProduct = {};
+                    updateStatus('Say "Hey STARBOY" to begin.', "Listening for the wake word.", true);
+                    startRecognition();
+                };
+                if (speakMessage) {
+                    speak(speakMessage, resetLogic);
+                } else {
+                    resetLogic();
+                }
+            };
+
+            if (recognition) {
+                recognition.onstart = () => { isListening = true; };
+                recognition.onend = () => { 
+                    isListening = false;
+                    if(!isSpeaking && conversationState !== 'IDLE' && conversationState !== 'CAMERA_SETUP') {
+                        setTimeout(startRecognition, 100);
+                    }
+                };
+                recognition.onerror = (event) => {
+                    console.error("Speech recognition error:", event.error);
+                    if (event.error === 'not-allowed') {
+                        updateStatus("Microphone access denied.", "Please enable permissions and refresh.", false);
+                        conversationState = 'IDLE';
+                    } else if (event.error !== 'no-speech'){
+                        resetToVoiceMode("There was a voice recognition error. Let's try again.");
+                    }
+                };
+                recognition.onresult = (event) => {
+                    let finalTranscript = '';
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        if (event.results[i].isFinal) {
+                            finalTranscript += event.results[i][0].transcript;
+                        }
+                    }
+                    finalTranscript = finalTranscript.toLowerCase().trim();
+                    if (!finalTranscript) return;
+
+                    console.log(`State: ${conversationState}, Transcript: ${finalTranscript}`);
+
+                    if (conversationState === 'AWAITING_WAKE_WORD') {
+                        if (finalTranscript.includes('hey starboy')) {
+                            conversationState = 'GREETING';
+                            speak("Hey there, how may I help you?", () => {
+                                conversationState = 'AWAITING_COMMAND';
+                                updateStatus("How may I help?", "e.g., 'Add 5 milk' or 'Summarize purchase'", true);
+                                startRecognition();
+                            });
+                        }
+                        return; 
+                    }
+                    
+                    if (finalTranscript.includes('cancel') && !finalTranscript.includes('product')) {
+                        returnToCommandMode("Okay, cancelling the current task.");
+                        return;
+                    }
+
+                    switch (conversationState) {
+                        case 'AWAITING_COMMAND':
+                            if (finalTranscript.includes('done') || finalTranscript.includes('finalize') || finalTranscript.includes('give me the bill') || finalTranscript.includes('what is the total')) {
+                                handleFinalizeBill();
+                            } else if (finalTranscript.includes('remove') || finalTranscript.includes('delete') || finalTranscript.includes('cancel product')) {
+                                const productToRemove = [...productDatabase.keys()].find(p => finalTranscript.includes(p));
+                                if (productToRemove) {
+                                    const message = removeProduct(productToRemove);
+                                    returnToCommandMode(message);
+                                } else {
+                                    speak("Please specify which product you'd like to remove.", () => returnToCommandMode(null));
+                                }
+                            } else if (finalTranscript.includes('what products are available') || finalTranscript.includes('list products')) {
+                                handleListProducts();
+                            } else if (finalTranscript.includes('summarize')) {
+                                handleSummarize();
+                            } else if (finalTranscript.includes('recipe') || finalTranscript.includes('what can i make')) {
+                                handleRecipe();
+                            } else {
+                                const quantityMatch = finalTranscript.match(/\d+/);
+                                const foundProduct = [...productDatabase.keys()].find(p => finalTranscript.includes(p));
+                                if (foundProduct && quantityMatch) {
+                                    tempProduct = { name: foundProduct, quantity: parseInt(quantityMatch[0], 10) };
+                                    conversationState = 'CONFIRMING_ADD';
+                                    speak(`Just to confirm, you want to add ${tempProduct.quantity} ${tempProduct.name}?`, () => {
+                                        updateStatus("Confirm your order", "Say 'yes' or 'no'", true);
+                                        startRecognition();
+                                    });
+                                } else if (foundProduct) {
+                                    tempProduct = { name: foundProduct };
+                                    const price = productDatabase.get(foundProduct);
+                                    conversationState = 'ASKING_QUANTITY';
+                                    speak(`Found ${foundProduct} at ${formatCurrency(price)}. How many?`, () => {
+                                        updateStatus("How many?", `Listening for quantity...`, true);
+                                        startRecognition();
+                                    });
+                                } else if (finalTranscript.includes('add') || finalTranscript.includes('new')) {
+                                    conversationState = 'ASKING_PRODUCT_NAME';
+                                    speak("Certainly. What product are you looking for?", () => {
+                                        updateStatus("What product?", "Listening for a product name...", true);
+                                        startRecognition();
+                                    });
+                                }
+                            }
+                            break;
+                        case 'ASKING_PRODUCT_NAME':
+                            const product = [...productDatabase.keys()].find(p => finalTranscript.includes(p));
+                            if (product) {
+                                tempProduct.name = product;
+                                const price = productDatabase.get(product);
+                                conversationState = 'ASKING_QUANTITY';
+                                speak(`Found ${product} at ${formatCurrency(price)}. How many?`, () => {
+                                   updateStatus("How many?", `Listening for quantity of ${product}...`, true);
+                                   startRecognition();
+                                });
+                            } else {
+                                speak("Sorry, I couldn't find that. Please try another product.", () => startRecognition());
+                            }
+                            break;
+                        case 'ASKING_QUANTITY':
+                            const qtyMatch = finalTranscript.match(/\d+/);
+                            if (qtyMatch) {
+                                tempProduct.quantity = parseInt(qtyMatch[0], 10);
+                                if (tempProduct.name && tempProduct.quantity > 0) {
+                                    const newTotal = addProduct(tempProduct.name, tempProduct.quantity);
+                                    returnToCommandMode(`Added ${tempProduct.quantity} ${tempProduct.name}. The new total is ${newTotal}.`);
+                                }
+                            } else {
+                                speak("I didn't catch a number. Please tell me the quantity.", () => startRecognition());
+                            }
+                            break;
+                        case 'CONFIRMING_ADD':
+                            if (finalTranscript.includes('yes') || finalTranscript.includes('correct')) {
+                                const newTotal = addProduct(tempProduct.name, tempProduct.quantity);
+                                returnToCommandMode(`Done. Added ${tempProduct.quantity} ${tempProduct.name}. The new total is ${newTotal}.`);
+                            } else if (finalTranscript.includes('no') || finalTranscript.includes('wrong')) {
+                                returnToCommandMode("My mistake. What would you like to do instead?");
+                            } else {
+                                speak("Please confirm with yes or no.", () => startRecognition());
+                            }
+                            break;
+                    }
+                };
+            }
+            
+            loadProducts();
+            renderBill();
+            if (SpeechRecognition) {
+                setupCameraAndDetection();
+            } else {
+                updateStatus("Voice control not supported.", "Please use a different browser.", false);
+            }
+        });
+    </script>
+</body>
+</html>
